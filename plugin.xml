@@ -1,0 +1,17 @@
+<library path="src">
+  <class name="VisualServoingGui" type="visual_servoing_gui.visual_servoing_gui_plugin.VisualServoingGuiPlugin" base_class_type="rqt_gui_py::Plugin">
+    <description>
+    Display for teleoperation of WAM.
+    </description>
+    <qtgui>
+      <group>
+        <label>Visualization</label>
+        <icon type="theme">folder</icon>
+        <statustip>Plugins related to visualization.</statustip>
+      </group>
+      <label>WAM Viewer</label>
+      <icon type="theme">video-display</icon>
+      <statustip>WAM Viewer</statustip>
+    </qtgui>
+  </class>
+</library>
