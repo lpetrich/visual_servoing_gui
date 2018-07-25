@@ -5,8 +5,8 @@ import numpy as np
 from std_msgs.msg import String, Bool, UInt32
 from sensor_msgs.msg import CompressedImage, JointState, Image
 from geometry_msgs.msg import PoseStamped, Pose
-from visual_servoing.msg import Error
-from visual_servoing.msg import TaskIds
+from uncalibrated_visual_servoing.msg import Error
+from uncalibrated_visual_servoing.msg import TaskIds
 
 from cv_bridge import CvBridge, CvBridgeError
 from python_qt_binding.QtCore import *
@@ -29,11 +29,10 @@ class VisualServoingGuiWidget(QWidget):
 		self.clicked_points = []
 		self._tracked_points = []
 		self.tracked_points = []
-		self.currently_tracking = False
 		self.task_ids = []
 		self.stereo_vision = self.camera_check()
 		# setup subscribers and publishers
-		sub_cam = rospy.Subscriber("/cam1/camera/image_raw/compressed", CompressedImage, self.callback_camera, queue_size = 3)
+		sub_cam = rospy.Subscriber("/cam1/camera/image_raw/compressed", CompressedImage, self.callback_camera, queue_size = 10)
 		sub_mtf = rospy.Subscriber("/cam1/trackers/patch_tracker", String, self.callback_mtf, queue_size = 3)
 		sub_err = rospy.Subscriber("/image_error", Error, self.callback_error, queue_size = 3)
 		self.pub_points = rospy.Publisher("/cam1/task_coordinates", String, queue_size = 1)
@@ -45,7 +44,7 @@ class VisualServoingGuiWidget(QWidget):
 			self.clicked_points2 = []
 			self._tracked_points2 = []
 			self.tracked_points2 = []
-			sub_cam2 = rospy.Subscriber("/cam2/camera/image_raw/compressed", CompressedImage, self.callback_camera2, queue_size = 3)
+			sub_cam2 = rospy.Subscriber("/cam2/camera/image_raw/compressed", CompressedImage, self.callback_camera2, queue_size = 10)
 			sub_mtf2 = rospy.Subscriber("/cam2/trackers/patch_tracker", String, self.callback_mtf2, queue_size = 3)
 			self.pub_points2 = rospy.Publisher("/cam2/task_coordinates", String, queue_size = 1)
 		self.initialize_widgets()
@@ -59,7 +58,6 @@ class VisualServoingGuiWidget(QWidget):
 			return False
 
 	def initialize_widgets(self):
-		self.current_widget = "menu"
 		self.main_layout = QVBoxLayout()
 		self.stacked_widget = QStackedWidget()
 		self.menu_widget = QWidget()
@@ -86,23 +84,22 @@ class VisualServoingGuiWidget(QWidget):
 		self.set_ids()
 		self.pub_ids.publish(self.task_ids)
 		self.clicked_points = []
-		self.currently_tracking = True
 
 	def set_ids(self):
 		self.task_ids = [0]*(len(self.clicked_points)/2)
-		print "task ids: ", self.task_ids
 
 	def reset(self):
-		self.currently_tracking = False
+		print "GUI: publishing reset"
 		self.pub_reset.publish(True)
-		self.pub_calculate.publish(False)
+		rospy.sleep(0.5)
+		self.error_msg.setText(" ")
 		self.clicked_points = []
 		self.tracked_points = []
-		self.error_msg.setText(" ")
+		self._tracked_points = []
 		if self.stereo_vision:
 			self.clicked_points2 = []
 			self.tracked_points2 = []
-
+			self._tracked_points2 = []
 
 	def menu_layout(self):
 		l = QVBoxLayout()
@@ -205,43 +202,33 @@ class VisualServoingGuiWidget(QWidget):
 #############################################################################################################
 	def callback_camera(self, data):
 		# self.pixmap = self.convert_img(data)
-		self.pixmap = self.convert_compressed_img(data)
-		self.paint_pixmap(self.pixmap)
-		if self.current_widget == "menu":
-			self._view.setPixmap(self.pixmap)
-		else:
-			print "Image callback error -- invalid current_widget"
-
-	def callback_mtf(self, data):
-		self.tracked_points = []
-		if self.currently_tracking:
-			pts = data.data.split()
-			l = ""
-			for i in range(0, len(pts), 2):
-				self._tracked_points.append([float(pts[i]), float(pts[i + 1])])
-				if len(self._tracked_points) == 4:
-					self.tracked_points.append(self._tracked_points)
-					self._tracked_points = []
+		pmap = self.convert_compressed_img(data)
+		self.paint_pixmap(pmap)
+		self._view.setPixmap(pmap)
 
 	def callback_camera2(self, data):
 		# self.pixmap = self.convert_img(data)
-		self.pixmap2 = self.convert_compressed_img(data)
-		self.paint_pixmap2(self.pixmap2)
-		if self.current_widget == "menu":
-			self._view2.setPixmap(self.pixmap2)
-		else:
-			print "Image callback error -- invalid current_widget"
+		pmap2 = self.convert_compressed_img(data)
+		self.paint_pixmap2(pmap2)
+		self._view2.setPixmap(pmap2)
+
+	def callback_mtf(self, data):
+		self.tracked_points = []
+		pts = data.data.split()
+		for i in range(0, len(pts), 2):
+			self._tracked_points.append([float(pts[i]), float(pts[i + 1])])
+			if len(self._tracked_points) == 4:
+				self.tracked_points.append(self._tracked_points)
+				self._tracked_points = []
 
 	def callback_mtf2(self, data):
 		self.tracked_points2 = []
-		if self.currently_tracking:
-			pts = data.data.split()
-			l = ""
-			for i in range(0, len(pts), 2):
-				self._tracked_points2.append([float(pts[i]), float(pts[i + 1])])
-				if len(self._tracked_points2) == 4:
-					self.tracked_points2.append(self._tracked_points2)
-					self._tracked_points2 = []
+		pts2 = data.data.split()
+		for i in range(0, len(pts2), 2):
+			self._tracked_points2.append([float(pts2[i]), float(pts2[i + 1])])
+			if len(self._tracked_points2) == 4:
+				self.tracked_points2.append(self._tracked_points2)
+				self._tracked_points2 = []
 
 	def callback_error(self, data):
 		err = data.error
@@ -254,8 +241,8 @@ class VisualServoingGuiWidget(QWidget):
 #############################################################################################################
 # IMAGE METHODS
 #############################################################################################################
-	def paint_pixmap(self, pixmap):
-		painter = QPainter(pixmap)
+	def paint_pixmap(self, pix):
+		painter = QPainter(pix)
 		if self._clicked_points:
 			self.paint_points(painter, self._clicked_points)
 		if self.clicked_points:
@@ -263,14 +250,14 @@ class VisualServoingGuiWidget(QWidget):
 		if self.tracked_points:
 			self.paint_polygons(painter, self.tracked_points)
 		
-	def paint_pixmap2(self, pixmap):
-		painter = QPainter(pixmap)
+	def paint_pixmap2(self, pix2):
+		painter2 = QPainter(pix2)
 		if self._clicked_points2:
-			self.paint_points(painter, self._clicked_points2)
+			self.paint_points(painter2, self._clicked_points2)
 		if self.clicked_points2:
-			self.paint_polygons(painter, self.clicked_points2)
+			self.paint_polygons(painter2, self.clicked_points2)
 		if self.tracked_points2:
-			self.paint_polygons(painter, self.tracked_points2)
+			self.paint_polygons(painter2, self.tracked_points2)
 		
 	def paint_points(self, painter, pt_list):
 		painter.setPen(self.pens[0])
